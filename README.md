@@ -14,3 +14,4 @@ Reporting: aggregates daily NAV, Sharpe Ratio, Alpha/Beta, and drawdown into str
 
 Risk is not a reporting afterthought — it is embedded at ingestion, signal approval, and execution, making the entire pipeline risk-aware by design.
 
+project link - http://192.168.41.78:5000
