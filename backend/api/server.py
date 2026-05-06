@@ -63,7 +63,8 @@ def on_price_update(quotes: dict):
     socketio.emit("price_update", {"quotes": {sym: q for sym, q in quotes.items()}, "nav": portfolio.total_nav})
 
 data_engine.add_callback(on_price_update)
-data_engine.start_polling(interval=20)
+if os.environ.get("VERCEL") != "1":
+    data_engine.start_polling(interval=20)
 
 
 # ═══════════════════════════════════════════════════════════════════
