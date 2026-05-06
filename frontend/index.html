@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpha Fund I — Hedge Fund Risk & Trading Platform</title>
+  <meta name="description" content="Real-time hedge fund portfolio risk modeling, VaR analysis, and semi-automated trading signals dashboard." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <!-- ── Sidebar ─────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">⬡</div>
+      <div>
+        <div class="brand-name">Alpha Fund I</div>
+        <div class="brand-sub">HF Platform v1.0</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="dashboard" id="nav-dashboard">
+        <span class="nav-icon">◈</span> Dashboard
+      </a>
+      <a href="#" class="nav-item" data-tab="portfolio" id="nav-portfolio">
+        <span class="nav-icon">◉</span> Portfolio
+      </a>
+      <a href="#" class="nav-item" data-tab="risk" id="nav-risk">
+        <span class="nav-icon">◭</span> Risk Analysis
+      </a>
+      <a href="#" class="nav-item" data-tab="signals" id="nav-signals">
+        <span class="nav-icon">◎</span> Trade Signals
+      </a>
+      <a href="#" class="nav-item" data-tab="orders" id="nav-orders">
+        <span class="nav-icon">◫</span> Orders
+      </a>
+      <a href="#" class="nav-item" data-tab="market" id="nav-market">
+        <span class="nav-icon">◳</span> Market Data
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="live-indicator">
+        <span class="live-dot" id="liveDot"></span>
+        <span id="liveStatus">Connecting…</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ──────────────────────────────────────────── -->
+  <main class="main-content">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title" id="pageTitle">Dashboard</h1>
+        <span class="page-subtitle" id="pageSubtitle">Real-time Portfolio Overview</span>
+      </div>
+      <div class="topbar-right">
+        <div class="clock" id="clock"></div>
+        <button class="btn btn-primary" id="refreshBtn" onclick="refreshAll()">↺ Refresh</button>
+      </div>
+    </header>
+
+    <!-- ── TAB: Dashboard ──────────────────────────────────── -->
+    <section class="tab-content active" id="tab-dashboard">
+      <!-- KPI Cards -->
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi-card" id="kpi-nav">
+          <div class="kpi-label">Total NAV</div>
+          <div class="kpi-value" id="kpiNav">—</div>
+          <div class="kpi-change" id="kpiNavChange">Loading…</div>
+        </div>
+        <div class="kpi-card" id="kpi-pnl">
+          <div class="kpi-label">Total P&amp;L</div>
+          <div class="kpi-value" id="kpiPnl">—</div>
+          <div class="kpi-change" id="kpiPnlPct">—</div>
+        </div>
+        <div class="kpi-card" id="kpi-cash">
+          <div class="kpi-label">Cash</div>
+          <div class="kpi-value" id="kpiCash">—</div>
+          <div class="kpi-change" id="kpiPositions">— positions</div>
+        </div>
+        <div class="kpi-card" id="kpi-var">
+          <div class="kpi-label">95% VaR (1-day)</div>
+          <div class="kpi-value" id="kpiVar">—</div>
+          <div class="kpi-change" id="kpiCvar">CVaR: —</div>
+        </div>
+        <div class="kpi-card" id="kpi-sharpe">
+          <div class="kpi-label">Sharpe Ratio</div>
+          <div class="kpi-value" id="kpiSharpe">—</div>
+          <div class="kpi-change" id="kpiSortino">Sortino: —</div>
+        </div>
+        <div class="kpi-card" id="kpi-mdd">
+          <div class="kpi-label">Max Drawdown</div>
+          <div class="kpi-value" id="kpiMdd">—</div>
+          <div class="kpi-change" id="kpiVol">Vol: —</div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="charts-row">
+        <div class="chart-card wide">
+          <div class="chart-header">
+            <span class="chart-title">Market Overview</span>
+          </div>
+          <div class="market-overview-grid" id="marketOverviewGrid">
+            <div class="spinner-inline"></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Sector Allocation</span>
+          </div>
+          <div class="chart-wrap"><canvas id="sectorChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Top Signals Summary -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🔔 Top Trade Signals</span>
+          <button class="btn btn-sm btn-ghost" onclick="loadTab('signals')">View All →</button>
+        </div>
+        <div id="topSignalsSummary" class="signal-summary-list">
+          <div class="spinner-inline"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TAB: Portfolio ──────────────────────────────────── -->
+    <section class="tab-content" id="tab-portfolio">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Holdings</span>
+          <button class="btn btn-primary btn-sm" onclick="openAddPosition()">+ Add Position</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="positionsTable">
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Qty</th><th>Avg Cost</th><th>Price</th>
+                <th>Market Value</th><th>Unr. P&L</th><th>Unr. P&L %</th>
+                <th>Weight %</th><th>Sector</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="positionsBody">
+              <tr><td colspan="10" class="loading-cell"><div class="spinner-inline"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Add Position Modal -->
+      <div class="modal-backdrop" id="addPositionModal">
+        <div class="modal">
+          <div class="modal-header">
+            <span>Add Position</span>
+            <button class="modal-close" onclick="closeAddPosition()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Symbol</label>
+              <input type="text" id="newSymbol" placeholder="e.g. TSLA" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="newQty" placeholder="100" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label>Avg Cost ($)</label>
+              <input type="number" id="newCost" placeholder="250.00" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label>Sector</label>
+              <input type="text" id="newSector" placeholder="Technology" class="form-control" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeAddPosition()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitAddPosition()">Add Position</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TAB: Risk Analysis ──────────────────────────────── -->
+    <section class="tab-content" id="tab-risk">
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">Hist. VaR 95%</div><div class="kpi-value" id="riskVar95">—</div><div class="kpi-change" id="riskVarDollar">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Hist. VaR 99%</div><div class="kpi-value" id="riskVar99">—</div><div class="kpi-change" id="riskVar99Dollar">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">CVaR 95%</div><div class="kpi-value" id="riskCvar">—</div><div class="kpi-change">Expected Shortfall</div></div>
+        <div class="kpi-card"><div class="kpi-label">Portfolio Beta</div><div class="kpi-value" id="riskBeta">—</div><div class="kpi-change" id="riskAlpha">Alpha: —</div></div>
+        <div class="kpi-card"><div class="kpi-label">Ann. Volatility</div><div class="kpi-value" id="riskVol">—</div><div class="kpi-change">1-year lookback</div></div>
+        <div class="kpi-card"><div class="kpi-label">Info. Ratio</div><div class="kpi-value" id="riskIR">—</div><div class="kpi-change" id="riskCalmar">Calmar: —</div></div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="charts-row">
+        <div class="chart-card wide">
+          <div class="chart-header"><span class="chart-title">Stress Test Scenarios</span></div>
+          <div class="chart-wrap"><canvas id="stressChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header"><span class="chart-title">VaR Comparison</span></div>
+          <div class="chart-wrap"><canvas id="varChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Correlation Matrix -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Correlation Matrix</span></div>
+        <div id="correlationMatrix" class="corr-matrix"></div>
+      </div>
+    </section>
+
+    <!-- ── TAB: Trade Signals ──────────────────────────────── -->
+    <section class="tab-content" id="tab-signals">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Trade Signals — Multi-Strategy</span>
+          <button class="btn btn-sm btn-primary" onclick="loadSignals()">↺ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="signalsTable">
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Signal</th><th>Confidence</th>
+                <th>Price</th><th>RSI</th><th>MACD</th>
+                <th>Momentum</th><th>BB</th><th>Mean Rev</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="signalsBody">
+              <tr><td colspan="10" class="loading-cell"><div class="spinner-inline"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Price Chart -->
+      <div class="card" id="priceChartCard" style="display:none">
+        <div class="card-header">
+          <span class="card-title" id="priceChartTitle">Price Chart</span>
+          <div class="period-tabs" id="periodTabs">
+            <button class="period-btn active" data-period="1mo">1M</button>
+            <button class="period-btn" data-period="3mo">3M</button>
+            <button class="period-btn" data-period="6mo">6M</button>
+            <button class="period-btn" data-period="1y">1Y</button>
+          </div>
+        </div>
+        <div class="chart-wrap tall"><canvas id="priceChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ── TAB: Orders ─────────────────────────────────────── -->
+    <section class="tab-content" id="tab-orders">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Pending Orders</span>
+          <button class="btn btn-primary btn-sm" onclick="openCreateOrder()">+ Create Order</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>ID</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Type</th><th>Strategy</th><th>Created</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="pendingOrdersBody">
+              <tr><td colspan="8" class="loading-cell">No pending orders</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Filled Orders</span></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>ID</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill Price</th><th>Strategy</th><th>Filled At</th></tr>
+            </thead>
+            <tbody id="filledOrdersBody">
+              <tr><td colspan="7" class="loading-cell">No filled orders</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Create Order Modal -->
+      <div class="modal-backdrop" id="createOrderModal">
+        <div class="modal">
+          <div class="modal-header">
+            <span>Create Order</span>
+            <button class="modal-close" onclick="closeCreateOrder()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Symbol</label>
+              <input type="text" id="orderSymbol" placeholder="AAPL" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label>Side</label>
+              <select id="orderSide" class="form-control">
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="orderQty" placeholder="100" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label>Order Type</label>
+              <select id="orderType" class="form-control">
+                <option value="market">Market</option>
+                <option value="limit">Limit</option>
+              </select>
+            </div>
+            <div class="form-group" id="limitPriceGroup" style="display:none">
+              <label>Limit Price ($)</label>
+              <input type="number" id="orderLimitPrice" placeholder="150.00" class="form-control" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeCreateOrder()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitCreateOrder()">Create Order</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TAB: Market Data ────────────────────────────────── -->
+    <section class="tab-content" id="tab-market">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Watchlist</span>
+          <input type="text" id="symbolSearch" class="form-control search-input" placeholder="Search symbol…" />
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Symbol</th><th>Price</th><th>Change</th><th>Change %</th><th>Day High</th><th>Day Low</th><th>Chart</th></tr>
+            </thead>
+            <tbody id="watchlistBody">
+              <tr><td colspan="7" class="loading-cell"><div class="spinner-inline"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
